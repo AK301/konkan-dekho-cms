@@ -1,33 +1,48 @@
-export async function GET() {
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+type RouteContext = {
+    params: Promise<{ id: string }>;
+};
+
+export async function GET(
+    _request: Request,
+    context: RouteContext
+) {
     try {
-        const properties = await prisma.property.findMany({
-            orderBy: {
-                createdAt: "desc",
-            },
+        const { id } = await context.params;
+
+        const property = await prisma.property.findUnique({
+            where: { id },
         });
+
+        if (!property) {
+            return NextResponse.json(
+                { error: "Property not found." },
+                { status: 404 }
+            );
+        }
 
         return NextResponse.json({
             success: true,
-            properties,
+            property,
         });
     } catch (error) {
-        console.error("Fetch properties error:", error);
+        console.error("Fetch property error:", error);
 
         return NextResponse.json(
-            {
-                success: false,
-                error: "Failed to fetch properties.",
-            },
+            { error: "Failed to fetch property." },
             { status: 500 }
         );
     }
 }
 
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-
-export async function POST(request: Request) {
+export async function PUT(
+    request: Request,
+    context: RouteContext
+) {
     try {
+        const { id } = await context.params;
         const body = await request.json();
 
         const {
@@ -45,6 +60,7 @@ export async function POST(request: Request) {
             mapUrl,
             latitude,
             longitude,
+            status,
         } = body;
 
         if (!name || !slug || !type || !location) {
@@ -56,7 +72,8 @@ export async function POST(request: Request) {
             );
         }
 
-        const property = await prisma.property.create({
+        const property = await prisma.property.update({
+            where: { id },
             data: {
                 name,
                 slug,
@@ -77,24 +94,49 @@ export async function POST(request: Request) {
                 latitude: latitude ? Number(latitude) : null,
                 longitude: longitude ? Number(longitude) : null,
 
-                status: "DRAFT",
+                status: status || "DRAFT",
             },
         });
 
-        return NextResponse.json(
-            {
-                success: true,
-                property,
-            },
-            { status: 201 }
-        );
+        return NextResponse.json({
+            success: true,
+            property,
+        });
     } catch (error) {
-        console.error("Create property error:", error);
+        console.error("Update property error:", error);
 
         return NextResponse.json(
             {
                 success: false,
-                error: "Failed to create property.",
+                error: "Failed to update property.",
+            },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(
+    _request: Request,
+    context: RouteContext
+) {
+    try {
+        const { id } = await context.params;
+
+        await prisma.property.delete({
+            where: { id },
+        });
+
+        return NextResponse.json({
+            success: true,
+            message: "Property deleted successfully.",
+        });
+    } catch (error) {
+        console.error("Delete property error:", error);
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: "Failed to delete property.",
             },
             { status: 500 }
         );
