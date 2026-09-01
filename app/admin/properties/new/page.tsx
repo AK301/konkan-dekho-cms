@@ -1,15 +1,26 @@
+
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+type Amenity = {
+    id: string;
+    name: string;
+    icon: string | null;
+    description: string | null;
+};
 
 export default function NewPropertyPage() {
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState("");
+    const router = useRouter();
+
+    const [amenities, setAmenities] = useState<Amenity[]>([]);
+    const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
 
     const [form, setForm] = useState({
         name: "",
         slug: "",
-        type: "Homestay",
+        type: "",
         location: "",
         shortDescription: "",
         description: "",
@@ -23,21 +34,28 @@ export default function NewPropertyPage() {
         longitude: "",
     });
 
-    function handleChange(
-        e: React.ChangeEvent<
-            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-        >
-    ) {
-        const { name, value } = e.target;
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState("");
 
-        setForm((prev) => ({
-            ...prev,
-            [name]: value,
-        }));
-    }
+    useEffect(() => {
+        async function fetchAmenities() {
+            try {
+                const response = await fetch("/api/amenities");
+                const data = await response.json();
 
-    function generateSlug(name: string) {
-        return name
+                if (data.success) {
+                    setAmenities(data.amenities);
+                }
+            } catch (error) {
+                console.error("Failed to fetch amenities:", error);
+            }
+        }
+
+        fetchAmenities();
+    }, []);
+
+    function generateSlug(value: string) {
+        return value
             .toLowerCase()
             .trim()
             .replace(/[^a-z0-9\s-]/g, "")
@@ -45,20 +63,36 @@ export default function NewPropertyPage() {
             .replace(/-+/g, "-");
     }
 
-    function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
-        const name = e.target.value;
+    function handleChange(
+        e: React.ChangeEvent<
+            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+        >
+    ) {
+        const { name, value } = e.target;
 
-        setForm((prev) => ({
-            ...prev,
-            name,
-            slug: generateSlug(name),
+        setForm((current) => ({
+            ...current,
+            [name]: value,
+            ...(name === "name" && {
+                slug: generateSlug(value),
+            }),
         }));
     }
 
-    async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    function toggleAmenity(amenityId: string) {
+        setSelectedAmenities((current) =>
+            current.includes(amenityId)
+                ? current.filter((id) => id !== amenityId)
+                : [...current, amenityId]
+        );
+    }
+
+    async function handleSubmit(
+        e: React.FormEvent<HTMLFormElement>
+    ) {
         e.preventDefault();
 
-        setLoading(true);
+        setSaving(true);
         setMessage("");
 
         try {
@@ -67,88 +101,125 @@ export default function NewPropertyPage() {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(form),
+                body: JSON.stringify({
+                    name: form.name,
+                    slug: form.slug,
+                    type: form.type,
+                    location: form.location,
+
+                    shortDescription:
+                        form.shortDescription || null,
+
+                    description:
+                        form.description || null,
+
+                    rooms: form.rooms
+                        ? Number(form.rooms)
+                        : null,
+
+                    guests: form.guests
+                        ? Number(form.guests)
+                        : null,
+
+                    price: form.price
+                        ? Number(form.price)
+                        : null,
+
+                    phone: form.phone || null,
+                    whatsapp: form.whatsapp || null,
+                    mapUrl: form.mapUrl || null,
+
+                    latitude: form.latitude
+                        ? Number(form.latitude)
+                        : null,
+
+                    longitude: form.longitude
+                        ? Number(form.longitude)
+                        : null,
+
+                    amenityIds: selectedAmenities,
+                }),
             });
 
             const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to create property");
+            if (!response.ok || !data.success) {
+                throw new Error(
+                    data.error || "Failed to save property."
+                );
             }
 
             setMessage("Property saved successfully!");
 
-            setForm({
-                name: "",
-                slug: "",
-                type: "Homestay",
-                location: "",
-                shortDescription: "",
-                description: "",
-                rooms: "",
-                guests: "",
-                price: "",
-                phone: "",
-                whatsapp: "",
-                mapUrl: "",
-                latitude: "",
-                longitude: "",
-            });
+            setTimeout(() => {
+                router.push("/admin/properties");
+            }, 1000);
         } catch (error) {
+            console.error("Save property error:", error);
+
             setMessage(
                 error instanceof Error
                     ? error.message
-                    : "Something went wrong."
+                    : "Failed to save property."
             );
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
     }
 
     return (
         <main className="min-h-screen bg-[#f7f5f0] text-[#1f2933]">
-            {/* Header */}
+
             <header className="border-b border-[#dedbd3] bg-white">
-                <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+                <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
+
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#9a7650]">
                             KonkanDekho CMS
                         </p>
 
-                        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+                        <h1 className="mt-1 text-2xl font-semibold">
                             Add Property
                         </h1>
                     </div>
 
-                    <div className="rounded-full border border-[#dedbd3] bg-[#faf9f6] px-4 py-2 text-sm text-gray-600">
-                        Draft
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() =>
+                            router.push("/admin/properties")
+                        }
+                        className="rounded-lg border border-[#dedbd3] px-4 py-2 text-sm font-medium transition hover:bg-[#faf9f6]"
+                    >
+                        Back
+                    </button>
+
                 </div>
             </header>
 
-            {/* Form */}
-            <div className="mx-auto max-w-6xl px-6 py-10">
-                <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="mx-auto max-w-5xl px-6 py-10">
+
+                <form
+                    onSubmit={handleSubmit}
+                    className="space-y-6"
+                >
 
                     {/* Basic Information */}
-                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
-                        <div className="mb-6">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
-                                01
-                            </p>
 
-                            <h2 className="mt-1 text-xl font-semibold">
+                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-6 shadow-sm">
+
+                        <div className="mb-6">
+                            <h2 className="text-lg font-semibold">
                                 Basic Information
                             </h2>
 
                             <p className="mt-1 text-sm text-gray-500">
-                                Enter the primary details of the property.
+                                Basic details about the property.
                             </p>
                         </div>
 
-                        <div className="grid gap-6 md:grid-cols-2">
+                        <div className="grid gap-5 md:grid-cols-2">
 
-                            <div className="md:col-span-2">
+                            <div>
                                 <label className="mb-2 block text-sm font-medium">
                                     Property Name *
                                 </label>
@@ -156,10 +227,10 @@ export default function NewPropertyPage() {
                                 <input
                                     name="name"
                                     value={form.name}
-                                    onChange={handleNameChange}
-                                    placeholder="e.g. Sunset Cove"
+                                    onChange={handleChange}
                                     required
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:border-[#9a7650] focus:ring-2 focus:ring-[#9a7650]/10"
+                                    placeholder="Sunset Cove"
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none transition focus:border-[#9a7650]"
                                 />
                             </div>
 
@@ -172,14 +243,36 @@ export default function NewPropertyPage() {
                                     name="type"
                                     value={form.type}
                                     onChange={handleChange}
-                                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    required
+                                    className="w-full rounded-xl border border-[#dedbd3] bg-white px-4 py-3 outline-none focus:border-[#9a7650]"
                                 >
-                                    <option>Homestay</option>
-                                    <option>Villa</option>
-                                    <option>Resort</option>
-                                    <option>Hotel</option>
-                                    <option>Apartment</option>
-                                    <option>Guest House</option>
+                                    <option value="">
+                                        Select type
+                                    </option>
+
+                                    <option value="Homestay">
+                                        Homestay
+                                    </option>
+
+                                    <option value="Villa">
+                                        Villa
+                                    </option>
+
+                                    <option value="Hotel">
+                                        Hotel
+                                    </option>
+
+                                    <option value="Resort">
+                                        Resort
+                                    </option>
+
+                                    <option value="Apartment">
+                                        Apartment
+                                    </option>
+
+                                    <option value="Lodge">
+                                        Lodge
+                                    </option>
                                 </select>
                             </div>
 
@@ -192,46 +285,49 @@ export default function NewPropertyPage() {
                                     name="location"
                                     value={form.location}
                                     onChange={handleChange}
-                                    placeholder="e.g. Aare-Ware, Ganpatipule"
                                     required
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    placeholder="Aare-Ware, Ganpatipule"
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
-                            <div className="md:col-span-2">
+                            <div>
                                 <label className="mb-2 block text-sm font-medium">
-                                    URL Slug *
+                                    Slug *
                                 </label>
 
                                 <input
                                     name="slug"
                                     value={form.slug}
                                     onChange={handleChange}
-                                    placeholder="sunset-cove"
                                     required
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    placeholder="sunset-cove"
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
 
-                                <p className="mt-2 text-xs text-gray-500">
+                                <p className="mt-1 text-xs text-gray-400">
                                     Automatically generated from the property name.
                                 </p>
                             </div>
+
                         </div>
                     </section>
 
                     {/* Description */}
-                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
-                        <div className="mb-6">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
-                                02
-                            </p>
 
-                            <h2 className="mt-1 text-xl font-semibold">
-                                Property Description
+                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-6 shadow-sm">
+
+                        <div className="mb-6">
+                            <h2 className="text-lg font-semibold">
+                                Description
                             </h2>
+
+                            <p className="mt-1 text-sm text-gray-500">
+                                Information that will appear on the property page.
+                            </p>
                         </div>
 
-                        <div className="space-y-6">
+                        <div className="space-y-5">
 
                             <div>
                                 <label className="mb-2 block text-sm font-medium">
@@ -243,8 +339,8 @@ export default function NewPropertyPage() {
                                     value={form.shortDescription}
                                     onChange={handleChange}
                                     rows={3}
-                                    placeholder="A short description used for cards and previews..."
-                                    className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    placeholder="A short description of the property..."
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
@@ -258,26 +354,25 @@ export default function NewPropertyPage() {
                                     value={form.description}
                                     onChange={handleChange}
                                     rows={7}
-                                    placeholder="Describe the property, experience, surroundings and important details..."
-                                    className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    placeholder="Detailed property description..."
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
+
                         </div>
                     </section>
 
                     {/* Capacity & Pricing */}
-                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
-                        <div className="mb-6">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
-                                03
-                            </p>
 
-                            <h2 className="mt-1 text-xl font-semibold">
+                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-6 shadow-sm">
+
+                        <div className="mb-6">
+                            <h2 className="text-lg font-semibold">
                                 Capacity & Pricing
                             </h2>
                         </div>
 
-                        <div className="grid gap-6 md:grid-cols-3">
+                        <div className="grid gap-5 md:grid-cols-3">
 
                             <div>
                                 <label className="mb-2 block text-sm font-medium">
@@ -291,13 +386,13 @@ export default function NewPropertyPage() {
                                     value={form.rooms}
                                     onChange={handleChange}
                                     placeholder="10"
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
                             <div>
                                 <label className="mb-2 block text-sm font-medium">
-                                    Maximum Guests
+                                    Guests
                                 </label>
 
                                 <input
@@ -307,13 +402,13 @@ export default function NewPropertyPage() {
                                     value={form.guests}
                                     onChange={handleChange}
                                     placeholder="20"
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
                             <div>
                                 <label className="mb-2 block text-sm font-medium">
-                                    Price / Night (₹)
+                                    Price / Night
                                 </label>
 
                                 <input
@@ -323,26 +418,94 @@ export default function NewPropertyPage() {
                                     value={form.price}
                                     onChange={handleChange}
                                     placeholder="5000"
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
                         </div>
                     </section>
 
-                    {/* Location */}
-                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
-                        <div className="mb-6">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
-                                04
-                            </p>
+                    {/* Amenities */}
 
-                            <h2 className="mt-1 text-xl font-semibold">
+                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-6 shadow-sm">
+
+                        <div className="mb-6">
+                            <h2 className="text-lg font-semibold">
+                                Amenities
+                            </h2>
+
+                            <p className="mt-1 text-sm text-gray-500">
+                                Select all amenities available at this property.
+                            </p>
+                        </div>
+
+                        {amenities.length === 0 ? (
+
+                            <div className="rounded-xl border border-dashed border-[#dedbd3] px-5 py-8 text-center text-sm text-gray-500">
+                                Loading amenities...
+                            </div>
+
+                        ) : (
+
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+                                {amenities.map((amenity) => {
+
+                                    const selected =
+                                        selectedAmenities.includes(
+                                            amenity.id
+                                        );
+
+                                    return (
+                                        <label
+                                            key={amenity.id}
+                                            className={`flex cursor - pointer items - center gap - 3 rounded - xl border p - 4 transition ${selected
+                                                ? "border-[#9a7650] bg-[#f7f3ed]"
+                                                : "border-[#e5e1d8] hover:bg-[#faf9f6]"
+                                                } `}
+                                        >
+
+                                            <input
+                                                type="checkbox"
+                                                checked={selected}
+                                                onChange={() =>
+                                                    toggleAmenity(
+                                                        amenity.id
+                                                    )
+                                                }
+                                                className="h-4 w-4 accent-[#9a7650]"
+                                            />
+
+                                            <span className="text-sm font-medium">
+                                                {amenity.name}
+                                            </span>
+
+                                        </label>
+                                    );
+                                })}
+
+                            </div>
+                        )}
+
+                        {selectedAmenities.length > 0 && (
+                            <p className="mt-4 text-sm text-[#9a7650]">
+                                {selectedAmenities.length} amenities selected
+                            </p>
+                        )}
+
+                    </section>
+
+                    {/* Location */}
+
+                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-6 shadow-sm">
+
+                        <div className="mb-6">
+                            <h2 className="text-lg font-semibold">
                                 Location
                             </h2>
                         </div>
 
-                        <div className="space-y-6">
+                        <div className="space-y-5">
 
                             <div>
                                 <label className="mb-2 block text-sm font-medium">
@@ -354,11 +517,11 @@ export default function NewPropertyPage() {
                                     value={form.mapUrl}
                                     onChange={handleChange}
                                     placeholder="https://maps.google.com/..."
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
-                            <div className="grid gap-6 md:grid-cols-2">
+                            <div className="grid gap-5 md:grid-cols-2">
 
                                 <div>
                                     <label className="mb-2 block text-sm font-medium">
@@ -367,10 +530,12 @@ export default function NewPropertyPage() {
 
                                     <input
                                         name="latitude"
+                                        type="number"
+                                        step="any"
                                         value={form.latitude}
                                         onChange={handleChange}
-                                        placeholder="16.8489"
-                                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                        placeholder="16.8485"
+                                        className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                     />
                                 </div>
 
@@ -381,30 +546,31 @@ export default function NewPropertyPage() {
 
                                     <input
                                         name="longitude"
+                                        type="number"
+                                        step="any"
                                         value={form.longitude}
                                         onChange={handleChange}
-                                        placeholder="73.2886"
-                                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                        placeholder="73.2887"
+                                        className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                     />
                                 </div>
 
                             </div>
+
                         </div>
                     </section>
 
                     {/* Contact */}
-                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
-                        <div className="mb-6">
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
-                                05
-                            </p>
 
-                            <h2 className="mt-1 text-xl font-semibold">
-                                Contact Information
+                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-6 shadow-sm">
+
+                        <div className="mb-6">
+                            <h2 className="text-lg font-semibold">
+                                Contact
                             </h2>
                         </div>
 
-                        <div className="grid gap-6 md:grid-cols-2">
+                        <div className="grid gap-5 md:grid-cols-2">
 
                             <div>
                                 <label className="mb-2 block text-sm font-medium">
@@ -413,10 +579,11 @@ export default function NewPropertyPage() {
 
                                 <input
                                     name="phone"
+                                    type="tel"
                                     value={form.phone}
                                     onChange={handleChange}
-                                    placeholder="+91 XXXXX XXXXX"
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    placeholder="+91..."
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
@@ -427,10 +594,11 @@ export default function NewPropertyPage() {
 
                                 <input
                                     name="whatsapp"
+                                    type="tel"
                                     value={form.whatsapp}
                                     onChange={handleChange}
-                                    placeholder="+91 XXXXX XXXXX"
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
+                                    placeholder="+91..."
+                                    className="w-full rounded-xl border border-[#dedbd3] px-4 py-3 outline-none focus:border-[#9a7650]"
                                 />
                             </div>
 
@@ -438,42 +606,38 @@ export default function NewPropertyPage() {
                     </section>
 
                     {/* Save */}
-                    <section className="sticky bottom-4 rounded-2xl border border-[#dedbd3] bg-white/95 p-5 shadow-lg backdrop-blur">
 
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center justify-between rounded-2xl border border-[#dedbd3] bg-white p-5">
 
-                            <div>
-                                {message && (
-                                    <p
-                                        className={`text-sm font-medium ${message.includes("successfully")
-                                                ? "text-green-700"
-                                                : "text-red-600"
-                                            }`}
-                                    >
-                                        {message}
-                                    </p>
-                                )}
-
-                                {!message && (
-                                    <p className="text-sm text-gray-500">
-                                        Property will be saved as a draft.
-                                    </p>
-                                )}
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="rounded-xl bg-[#1f2933] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {loading ? "Saving..." : "Save Property"}
-                            </button>
-
+                        <div>
+                            {message && (
+                                <p
+                                    className={`text - sm font - medium ${message.includes("success")
+                                        ? "text-green-600"
+                                        : "text-red-600"
+                                        } `}
+                                >
+                                    {message}
+                                </p>
+                            )}
                         </div>
-                    </section>
+
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="rounded-xl bg-[#1f2933] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {saving
+                                ? "Saving..."
+                                : "Save Property"}
+                        </button>
+
+                    </div>
 
                 </form>
+
             </div>
+
         </main>
     );
 }

@@ -18,6 +18,8 @@ type Property = {
 export default function PropertiesPage() {
     const [properties, setProperties] = useState<Property[]>([]);
     const [loading, setLoading] = useState(true);
+    const [amenities, setAmenities] = useState<any[]>([]);
+    const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
 
     useEffect(() => {
         async function loadProperties() {
@@ -36,6 +38,22 @@ export default function PropertiesPage() {
         }
 
         loadProperties();
+    }, []);
+    useEffect(() => {
+        async function fetchAmenities() {
+            try {
+                const response = await fetch("/api/amenities");
+                const data = await response.json();
+
+                if (data.success) {
+                    setAmenities(data.amenities);
+                }
+            } catch (error) {
+                console.error("Failed to fetch amenities:", error);
+            }
+        }
+
+        fetchAmenities();
     }, []);
 
     return (

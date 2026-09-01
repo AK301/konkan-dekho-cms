@@ -1,8 +1,19 @@
+
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
 export async function GET() {
     try {
         const properties = await prisma.property.findMany({
             orderBy: {
                 createdAt: "desc",
+            },
+            include: {
+                amenities: {
+                    include: {
+                        amenity: true,
+                    },
+                },
             },
         });
 
@@ -18,13 +29,12 @@ export async function GET() {
                 success: false,
                 error: "Failed to fetch properties.",
             },
-            { status: 500 }
+            {
+                status: 500,
+            }
         );
     }
 }
-
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
     try {
@@ -35,27 +45,43 @@ export async function POST(request: Request) {
             slug,
             type,
             location,
+
             shortDescription,
             description,
+
             rooms,
             guests,
             price,
+
             phone,
             whatsapp,
             mapUrl,
+
             latitude,
             longitude,
+
+            amenityIds,
         } = body;
 
+        // Basic validation
         if (!name || !slug || !type || !location) {
             return NextResponse.json(
                 {
+                    success: false,
                     error: "Name, slug, type and location are required.",
                 },
-                { status: 400 }
+                {
+                    status: 400,
+                }
             );
         }
 
+        // Make sure amenityIds is always an array
+        const selectedAmenityIds: string[] = Array.isArray(amenityIds)
+            ? amenityIds
+            : [];
+
+        // Create property + amenities together
         const property = await prisma.property.create({
             data: {
                 name,
@@ -63,21 +89,71 @@ export async function POST(request: Request) {
                 type,
                 location,
 
-                shortDescription: shortDescription || null,
-                description: description || null,
+                shortDescription:
+                    shortDescription || null,
 
-                rooms: rooms ? Number(rooms) : null,
-                guests: guests ? Number(guests) : null,
-                price: price ? Number(price) : null,
+                description:
+                    description || null,
 
-                phone: phone || null,
-                whatsapp: whatsapp || null,
-                mapUrl: mapUrl || null,
+                rooms:
+                    rooms !== null && rooms !== undefined && rooms !== ""
+                        ? Number(rooms)
+                        : null,
 
-                latitude: latitude ? Number(latitude) : null,
-                longitude: longitude ? Number(longitude) : null,
+                guests:
+                    guests !== null && guests !== undefined && guests !== ""
+                        ? Number(guests)
+                        : null,
+
+                price:
+                    price !== null && price !== undefined && price !== ""
+                        ? Number(price)
+                        : null,
+
+                phone:
+                    phone || null,
+
+                whatsapp:
+                    whatsapp || null,
+
+                mapUrl:
+                    mapUrl || null,
+
+                latitude:
+                    latitude !== null &&
+                        latitude !== undefined &&
+                        latitude !== ""
+                        ? Number(latitude)
+                        : null,
+
+                longitude:
+                    longitude !== null &&
+                        longitude !== undefined &&
+                        longitude !== ""
+                        ? Number(longitude)
+                        : null,
 
                 status: "DRAFT",
+
+                amenities: {
+                    create: selectedAmenityIds.map(
+                        (amenityId) => ({
+                            amenity: {
+                                connect: {
+                                    id: amenityId,
+                                },
+                            },
+                        })
+                    ),
+                },
+            },
+
+            include: {
+                amenities: {
+                    include: {
+                        amenity: true,
+                    },
+                },
             },
         });
 
@@ -86,7 +162,9 @@ export async function POST(request: Request) {
                 success: true,
                 property,
             },
-            { status: 201 }
+            {
+                status: 201,
+            }
         );
     } catch (error) {
         console.error("Create property error:", error);
@@ -96,7 +174,10 @@ export async function POST(request: Request) {
                 success: false,
                 error: "Failed to create property.",
             },
-            { status: 500 }
+            {
+                status: 500,
+            }
         );
     }
 }
+

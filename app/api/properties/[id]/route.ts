@@ -1,8 +1,11 @@
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 type RouteContext = {
-    params: Promise<{ id: string }>;
+    params: Promise<{
+        id: string;
+    }>;
 };
 
 export async function GET(
@@ -13,13 +16,27 @@ export async function GET(
         const { id } = await context.params;
 
         const property = await prisma.property.findUnique({
-            where: { id },
+            where: {
+                id,
+            },
+            include: {
+                amenities: {
+                    include: {
+                        amenity: true,
+                    },
+                },
+            },
         });
 
         if (!property) {
             return NextResponse.json(
-                { error: "Property not found." },
-                { status: 404 }
+                {
+                    success: false,
+                    error: "Property not found.",
+                },
+                {
+                    status: 404,
+                }
             );
         }
 
@@ -31,8 +48,13 @@ export async function GET(
         console.error("Fetch property error:", error);
 
         return NextResponse.json(
-            { error: "Failed to fetch property." },
-            { status: 500 }
+            {
+                success: false,
+                error: "Failed to fetch property.",
+            },
+            {
+                status: 500,
+            }
         );
     }
 }
@@ -43,6 +65,7 @@ export async function PUT(
 ) {
     try {
         const { id } = await context.params;
+
         const body = await request.json();
 
         const {
@@ -50,53 +73,148 @@ export async function PUT(
             slug,
             type,
             location,
+
             shortDescription,
             description,
+
             rooms,
             guests,
             price,
+
             phone,
             whatsapp,
             mapUrl,
+
             latitude,
             longitude,
+
             status,
+
+            amenityIds,
         } = body;
 
         if (!name || !slug || !type || !location) {
             return NextResponse.json(
                 {
+                    success: false,
                     error: "Name, slug, type and location are required.",
                 },
-                { status: 400 }
+                {
+                    status: 400,
+                }
             );
         }
 
-        const property = await prisma.property.update({
-            where: { id },
-            data: {
-                name,
-                slug,
-                type,
-                location,
+        const selectedAmenityIds: string[] =
+            Array.isArray(amenityIds)
+                ? amenityIds
+                : [];
 
-                shortDescription: shortDescription || null,
-                description: description || null,
+        // Update property and amenities together
+        const property = await prisma.$transaction(
+            async (transaction) => {
 
-                rooms: rooms ? Number(rooms) : null,
-                guests: guests ? Number(guests) : null,
-                price: price ? Number(price) : null,
+                // 1. Update the property itself
+                await transaction.property.update({
+                    where: {
+                        id,
+                    },
+                    data: {
+                        name,
+                        slug,
+                        type,
+                        location,
 
-                phone: phone || null,
-                whatsapp: whatsapp || null,
-                mapUrl: mapUrl || null,
+                        shortDescription:
+                            shortDescription || null,
 
-                latitude: latitude ? Number(latitude) : null,
-                longitude: longitude ? Number(longitude) : null,
+                        description:
+                            description || null,
 
-                status: status || "DRAFT",
-            },
-        });
+                        rooms:
+                            rooms !== null &&
+                                rooms !== undefined &&
+                                rooms !== ""
+                                ? Number(rooms)
+                                : null,
+
+                        guests:
+                            guests !== null &&
+                                guests !== undefined &&
+                                guests !== ""
+                                ? Number(guests)
+                                : null,
+
+                        price:
+                            price !== null &&
+                                price !== undefined &&
+                                price !== ""
+                                ? Number(price)
+                                : null,
+
+                        phone:
+                            phone || null,
+
+                        whatsapp:
+                            whatsapp || null,
+
+                        mapUrl:
+                            mapUrl || null,
+
+                        latitude:
+                            latitude !== null &&
+                                latitude !== undefined &&
+                                latitude !== ""
+                                ? Number(latitude)
+                                : null,
+
+                        longitude:
+                            longitude !== null &&
+                                longitude !== undefined &&
+                                longitude !== ""
+                                ? Number(longitude)
+                                : null,
+
+                        status:
+                            status || "DRAFT",
+                    },
+                });
+
+                // 2. Remove old amenity relationships
+                await transaction.propertyAmenity.deleteMany({
+                    where: {
+                        propertyId: id,
+                    },
+                });
+
+                // 3. Create the newly selected relationships
+                if (selectedAmenityIds.length > 0) {
+                    await transaction.propertyAmenity.createMany({
+                        data: selectedAmenityIds.map(
+                            (amenityId) => ({
+                                propertyId: id,
+                                amenityId,
+                            })
+                        ),
+                        skipDuplicates: true,
+                    });
+                }
+
+                // 4. Return updated property with amenities
+                return transaction.property.findUnique({
+                    where: {
+                        id,
+                    },
+                    include: {
+                        amenities: {
+                            include: {
+                                amenity: true,
+                            },
+                        },
+                    },
+                });
+            }
+        );
 
         return NextResponse.json({
             success: true,
@@ -110,7 +228,9 @@ export async function PUT(
                 success: false,
                 error: "Failed to update property.",
             },
-            { status: 500 }
+            {
+                status: 500,
+            }
         );
     }
 }
@@ -122,8 +242,28 @@ export async function DELETE(
     try {
         const { id } = await context.params;
 
+        const property = await prisma.property.findUnique({
+            where: {
+                id,
+            },
+        });
+
+        if (!property) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Property not found.",
+                },
+                {
+                    status: 404,
+                }
+            );
+        }
+
         await prisma.property.delete({
-            where: { id },
+            where: {
+                id,
+            },
         });
 
         return NextResponse.json({
@@ -138,7 +278,10 @@ export async function DELETE(
                 success: false,
                 error: "Failed to delete property.",
             },
-            { status: 500 }
+            {
+                status: 500,
+            }
         );
     }
 }
+

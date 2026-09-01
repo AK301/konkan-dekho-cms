@@ -31,6 +31,30 @@ model Property {
 
   status           String   @default("DRAFT")
 
+  amenities        PropertyAmenity[]
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model Amenity {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  icon        String?
+  description String?
+
+  properties  PropertyAmenity[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PropertyAmenity {
+  propertyId String
+  amenityId  String
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  amenity  Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([propertyId, amenityId])
 }

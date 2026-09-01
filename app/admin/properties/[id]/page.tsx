@@ -1,7 +1,19 @@
+
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+
+type Amenity = {
+    id: string;
+    name: string;
+    icon: string | null;
+    description: string | null;
+};
+
+type PropertyAmenity = {
+    amenity: Amenity;
+};
 
 type Property = {
     id: string;
@@ -20,6 +32,7 @@ type Property = {
     latitude: number | null;
     longitude: number | null;
     status: string;
+    amenities?: PropertyAmenity[];
 };
 
 export default function EditPropertyPage() {
@@ -29,22 +42,49 @@ export default function EditPropertyPage() {
     const id = params.id as string;
 
     const [property, setProperty] = useState<Property | null>(null);
+    const [amenities, setAmenities] = useState<Amenity[]>([]);
+    const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [message, setMessage] = useState("");
 
+    // Load property and amenities
     useEffect(() => {
-        async function loadProperty() {
+        async function loadData() {
             try {
-                const response = await fetch(`/api/properties/${id}`);
-                const data = await response.json();
+                const [propertyResponse, amenitiesResponse] =
+                    await Promise.all([
+                        fetch(`/api/properties/${id}`),
+                        fetch("/api/amenities"),
+                    ]);
 
-                if (!response.ok) {
-                    throw new Error(data.error || "Property not found");
+                const propertyData = await propertyResponse.json();
+                const amenitiesData = await amenitiesResponse.json();
+
+                if (!propertyResponse.ok) {
+                    throw new Error(
+                        propertyData.error || "Property not found"
+                    );
                 }
 
-                setProperty(data.property);
+                if (!amenitiesResponse.ok || !amenitiesData.success) {
+                    throw new Error("Failed to load amenities.");
+                }
+
+                const loadedProperty = propertyData.property;
+
+                setProperty(loadedProperty);
+                setAmenities(amenitiesData.amenities);
+
+                // Pre-select amenities already attached to property
+                const existingAmenityIds =
+                    loadedProperty.amenities?.map(
+                        (item: PropertyAmenity) => item.amenity.id
+                    ) ?? [];
+
+                setSelectedAmenities(existingAmenityIds);
             } catch (error) {
                 setMessage(
                     error instanceof Error
@@ -56,7 +96,7 @@ export default function EditPropertyPage() {
             }
         }
 
-        loadProperty();
+        loadData();
     }, [id]);
 
     function handleChange(
@@ -70,9 +110,29 @@ export default function EditPropertyPage() {
             prev
                 ? {
                     ...prev,
-                    [name]: value,
+                    [name]:
+                        name === "rooms" ||
+                            name === "guests" ||
+                            name === "price"
+                            ? value === ""
+                                ? null
+                                : Number(value)
+                            : name === "latitude" ||
+                                name === "longitude"
+                                ? value === ""
+                                    ? null
+                                    : Number(value)
+                                : value,
                 }
                 : prev
+        );
+    }
+
+    function toggleAmenity(amenityId: string) {
+        setSelectedAmenities((current) =>
+            current.includes(amenityId)
+                ? current.filter((id) => id !== amenityId)
+                : [...current, amenityId]
         );
     }
 
@@ -90,16 +150,29 @@ export default function EditPropertyPage() {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(property),
+                body: JSON.stringify({
+                    ...property,
+                    amenityIds: selectedAmenities,
+                }),
             });
 
             const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to update property.");
+            if (!response.ok || !data.success) {
+                throw new Error(
+                    data.error || "Failed to update property."
+                );
             }
 
             setProperty(data.property);
+
+            const updatedAmenityIds =
+                data.property.amenities?.map(
+                    (item: PropertyAmenity) => item.amenity.id
+                ) ?? [];
+
+            setSelectedAmenities(updatedAmenityIds);
+
             setMessage("Property updated successfully.");
         } catch (error) {
             setMessage(
@@ -131,7 +204,9 @@ export default function EditPropertyPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "Failed to delete property.");
+                throw new Error(
+                    data.error || "Failed to delete property."
+                );
             }
 
             router.push("/admin/properties");
@@ -165,7 +240,9 @@ export default function EditPropertyPage() {
                     </h1>
 
                     <button
-                        onClick={() => router.push("/admin/properties")}
+                        onClick={() =>
+                            router.push("/admin/properties")
+                        }
                         className="mt-5 rounded-xl bg-[#1f2933] px-5 py-3 text-sm font-semibold text-white"
                     >
                         Back to Properties
@@ -193,7 +270,9 @@ export default function EditPropertyPage() {
                     </div>
 
                     <button
-                        onClick={() => router.push("/admin/properties")}
+                        onClick={() =>
+                            router.push("/admin/properties")
+                        }
                         className="rounded-xl border border-[#dedbd3] bg-white px-4 py-2 text-sm font-medium hover:bg-[#faf9f6]"
                     >
                         ← Back
@@ -204,7 +283,10 @@ export default function EditPropertyPage() {
 
             <div className="mx-auto max-w-6xl px-6 py-10">
 
-                <form onSubmit={handleSubmit} className="space-y-8">
+                <form
+                    onSubmit={handleSubmit}
+                    className="space-y-8"
+                >
 
                     {/* Basic Information */}
                     <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
@@ -246,12 +328,24 @@ export default function EditPropertyPage() {
                                     onChange={handleChange}
                                     className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 outline-none focus:border-[#9a7650]"
                                 >
-                                    <option>Homestay</option>
-                                    <option>Villa</option>
-                                    <option>Resort</option>
-                                    <option>Hotel</option>
-                                    <option>Apartment</option>
-                                    <option>Guest House</option>
+                                    <option value="Homestay">
+                                        Homestay
+                                    </option>
+                                    <option value="Villa">
+                                        Villa
+                                    </option>
+                                    <option value="Resort">
+                                        Resort
+                                    </option>
+                                    <option value="Hotel">
+                                        Hotel
+                                    </option>
+                                    <option value="Apartment">
+                                        Apartment
+                                    </option>
+                                    <option value="Guest House">
+                                        Guest House
+                                    </option>
                                 </select>
                             </div>
 
@@ -392,12 +486,85 @@ export default function EditPropertyPage() {
                         </div>
                     </section>
 
-                    {/* Location */}
+                    {/* Amenities */}
                     <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
 
                         <div className="mb-6">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
                                 04
+                            </p>
+
+                            <h2 className="mt-1 text-xl font-semibold">
+                                Amenities
+                            </h2>
+
+                            <p className="mt-1 text-sm text-gray-500">
+                                Select all amenities available at this property.
+                            </p>
+                        </div>
+
+                        {amenities.length === 0 ? (
+
+                            <div className="rounded-xl border border-dashed border-[#dedbd3] px-5 py-8 text-center text-sm text-gray-500">
+                                Loading amenities...
+                            </div>
+
+                        ) : (
+
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+                                {amenities.map((amenity) => {
+
+                                    const selected =
+                                        selectedAmenities.includes(
+                                            amenity.id
+                                        );
+
+                                    return (
+                                        <label
+                                            key={amenity.id}
+                                            className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition ${selected
+                                                    ? "border-[#9a7650] bg-[#f7f3ed]"
+                                                    : "border-[#e5e1d8] hover:bg-[#faf9f6]"
+                                                }`}
+                                        >
+
+                                            <input
+                                                type="checkbox"
+                                                checked={selected}
+                                                onChange={() =>
+                                                    toggleAmenity(
+                                                        amenity.id
+                                                    )
+                                                }
+                                                className="h-4 w-4 accent-[#9a7650]"
+                                            />
+
+                                            <span className="text-sm font-medium">
+                                                {amenity.name}
+                                            </span>
+
+                                        </label>
+                                    );
+                                })}
+
+                            </div>
+                        )}
+
+                        {selectedAmenities.length > 0 && (
+                            <p className="mt-4 text-sm text-[#9a7650]">
+                                {selectedAmenities.length} amenities selected
+                            </p>
+                        )}
+
+                    </section>
+
+                    {/* Location */}
+                    <section className="rounded-2xl border border-[#dedbd3] bg-white p-7 shadow-sm">
+
+                        <div className="mb-6">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
+                                05
                             </p>
 
                             <h2 className="mt-1 text-xl font-semibold">
@@ -429,6 +596,8 @@ export default function EditPropertyPage() {
 
                                     <input
                                         name="latitude"
+                                        type="number"
+                                        step="any"
                                         value={property.latitude ?? ""}
                                         onChange={handleChange}
                                         className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
@@ -442,6 +611,8 @@ export default function EditPropertyPage() {
 
                                     <input
                                         name="longitude"
+                                        type="number"
+                                        step="any"
                                         value={property.longitude ?? ""}
                                         onChange={handleChange}
                                         className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-[#9a7650]"
@@ -458,7 +629,7 @@ export default function EditPropertyPage() {
 
                         <div className="mb-6">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
-                                05
+                                06
                             </p>
 
                             <h2 className="mt-1 text-xl font-semibold">
@@ -502,7 +673,7 @@ export default function EditPropertyPage() {
 
                         <div className="mb-6">
                             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7650]">
-                                06
+                                07
                             </p>
 
                             <h2 className="mt-1 text-xl font-semibold">
@@ -522,8 +693,13 @@ export default function EditPropertyPage() {
                                 onChange={handleChange}
                                 className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 outline-none focus:border-[#9a7650]"
                             >
-                                <option value="DRAFT">Draft</option>
-                                <option value="PUBLISHED">Published</option>
+                                <option value="DRAFT">
+                                    Draft
+                                </option>
+
+                                <option value="PUBLISHED">
+                                    Published
+                                </option>
                             </select>
 
                         </div>
@@ -537,7 +713,9 @@ export default function EditPropertyPage() {
                             <div>
                                 {message ? (
                                     <p
-                                        className={`text-sm font-medium ${message.includes("successfully")
+                                        className={`text-sm font-medium ${message.includes(
+                                            "successfully"
+                                        )
                                                 ? "text-green-700"
                                                 : "text-red-600"
                                             }`}
@@ -556,30 +734,35 @@ export default function EditPropertyPage() {
                                 <button
                                     type="button"
                                     onClick={handleDelete}
-                                    disabled={deleting || saving}
+                                    disabled={
+                                        deleting || saving
+                                    }
                                     className="rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
                                 >
-                                    {deleting ? "Deleting..." : "Delete"}
+                                    {deleting
+                                        ? "Deleting..."
+                                        : "Delete"}
                                 </button>
 
                                 <button
                                     type="submit"
-                                    disabled={saving || deleting}
+                                    disabled={
+                                        saving || deleting
+                                    }
                                     className="rounded-xl bg-[#1f2933] px-7 py-3 text-sm font-semibold text-white hover:bg-[#111827] disabled:opacity-60"
                                 >
-                                    {saving ? "Saving..." : "Save Changes"}
+                                    {saving
+                                        ? "Saving..."
+                                        : "Save Changes"}
                                 </button>
 
                             </div>
 
                         </div>
-
                     </section>
 
                 </form>
-
             </div>
-
         </main>
     );
 }
