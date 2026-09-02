@@ -31,7 +31,8 @@ model Property {
 
   status           String   @default("DRAFT")
 
-  amenities        PropertyAmenity[]
+ amenities        PropertyAmenity[]
+media            PropertyMedia[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -44,10 +45,12 @@ model Amenity {
   description String?
 
   properties  PropertyAmenity[]
+ 
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
 
 model PropertyAmenity {
   propertyId String
@@ -57,4 +60,24 @@ model PropertyAmenity {
   amenity  Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
 
   @@id([propertyId, amenityId])
+}
+model PropertyMedia {
+  id         String   @id @default(cuid())
+  propertyId String
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  type       String
+  category   String
+  url        String
+  thumbnail  String?
+
+  fileName   String?
+  altText    String?
+
+  sortOrder  Int      @default(0)
+  isCover    Boolean  @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
